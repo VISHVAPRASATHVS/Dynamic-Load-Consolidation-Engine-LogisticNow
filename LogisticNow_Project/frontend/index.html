@@ -1,0 +1,651 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LogisticNow — Dynamic Load Consolidation Engine</title>
+  <meta name="description"
+    content="Autonomous logistics optimization system with VRP solver, AI agents, and real-time route visualization. Team Sypnatix." />
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="/static/css/styles.css" />
+</head>
+
+<body>
+
+  <!-- ── Header ───────────────────────────────────────────────── -->
+  <header class="header">
+    <div class="header-brand">
+      <div class="brand-logo">LN</div>
+      <div>
+        <div class="brand-name">Logistic<span>Now</span></div>
+        <div class="brand-sub">Dynamic Load Consolidation Engine</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="team-badge">Team Sypnatix</div>
+      <div class="status-dot" id="api-status-dot" title="API Status"></div>
+    </div>
+  </header>
+
+  <!-- ── Main Layout ───────────────────────────────────────────── -->
+  <div class="main-layout">
+
+    <!-- ── SIDEBAR ────────────────────────────────────────────── -->
+    <aside class="sidebar">
+
+      <!-- Control Panel -->
+      <div>
+        <div class="sidebar-section-title">Optimization Controls</div>
+
+        <div class="card">
+          <div class="card-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+              <path d="M4.93 4.93a10 10 0 0 0 0 14.14" />
+            </svg>
+            VRP Parameters
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Shipments to Process</label>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <input type="range" class="form-range" id="num-shipments" min="50" max="5000" value="200" step="50" />
+              <span class="range-value" id="num-shipments-val">200</span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Fleet Size (Vehicles)</label>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <input type="range" class="form-range" id="num-vehicles" min="5" max="300" value="30" step="5" />
+              <span class="range-value" id="num-vehicles-val">30</span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Clustering Algorithm</label>
+            <select class="form-select" id="cluster-algo">
+              <option value="dbscan">DBSCAN (Geographic)</option>
+              <option value="kmeans">K-Means</option>
+            </select>
+          </div>
+
+          <button class="btn btn-primary" id="run-btn" onclick="App.runOptimization()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 3 19 12 5 21 5 3" />
+            </svg>
+            Run Optimization
+          </button>
+        </div>
+      </div>
+
+      <!-- Upload Panel -->
+      <div>
+        <div class="sidebar-section-title">Upload Custom Data</div>
+        <div class="card">
+          <div class="card-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            CSV Upload
+          </div>
+
+          <div class="upload-zone" id="ship-upload-zone" onclick="document.getElementById('ship-file').click()">
+            <div class="upload-zone-icon">&#9993;</div>
+            <div class="upload-zone-text"><strong>Shipment CSV</strong><br />Click to upload</div>
+          </div>
+          <input type="file" id="ship-file" accept=".csv" onchange="App.uploadFile('shipments', this)" />
+
+          <div class="upload-zone" id="fleet-upload-zone" onclick="document.getElementById('fleet-file').click()">
+            <div class="upload-zone-icon">&#128666;</div>
+            <div class="upload-zone-text"><strong>Fleet CSV</strong><br />Click to upload</div>
+          </div>
+          <input type="file" id="fleet-file" accept=".csv" onchange="App.uploadFile('fleet', this)" />
+
+          <div id="upload-status" style="font-size:11px;color:var(--text-muted);margin-top:8px;"></div>
+        </div>
+      </div>
+
+      <!-- Dataset Info -->
+      <div>
+        <div class="sidebar-section-title">Dataset Info</div>
+        <div class="card" id="dataset-info">
+          <div class="compare-row">
+            <span class="compare-key">Shipments loaded</span>
+            <span class="compare-val" id="ds-ships">5,000</span>
+          </div>
+          <div class="compare-row">
+            <span class="compare-key">Fleet vehicles</span>
+            <span class="compare-val" id="ds-fleet">300</span>
+          </div>
+          <div class="compare-row">
+            <span class="compare-key">Priority levels</span>
+            <span class="compare-val" style="font-size:11px;">Low / Med / High / Critical</span>
+          </div>
+          <div class="compare-row">
+            <span class="compare-key">Vehicle types</span>
+            <span class="compare-val" style="font-size:11px;">Mini / Medium / Heavy</span>
+          </div>
+          <div class="compare-row">
+            <span class="compare-key">Solver</span>
+            <span class="compare-val tag tag-blue">OR-Tools VRP</span>
+          </div>
+          <div class="compare-row">
+            <span class="compare-key">Clustering</span>
+            <span class="compare-val tag tag-purple">DBSCAN</span>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- ── CONTENT AREA ──────────────────────────────────────── -->
+    <div style="display:flex;flex-direction:column;overflow:hidden;">
+
+      <!-- KPI Strip -->
+      <div class="kpi-strip">
+        <div class="kpi-card">
+          <div class="kpi-label">Trucks Used</div>
+          <div class="kpi-value blue count-up" id="kpi-trucks">--</div>
+          <div class="kpi-delta" id="kpi-trucks-delta"></div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Cost Saved</div>
+          <div class="kpi-value green count-up" id="kpi-cost">--</div>
+          <div class="kpi-delta pos" id="kpi-cost-delta"></div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">CO2 Reduced</div>
+          <div class="kpi-value green count-up" id="kpi-co2">--</div>
+          <div class="kpi-delta pos" id="kpi-co2-delta"></div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Avg Utilization</div>
+          <div class="kpi-value amber count-up" id="kpi-util">--</div>
+          <div class="kpi-delta" id="kpi-util-delta"></div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">SLA Compliance</div>
+          <div class="kpi-value purple count-up" id="kpi-sla">--</div>
+          <div class="kpi-delta" id="kpi-sla-delta"></div>
+        </div>
+      </div>
+
+      <!-- ── Tab Navigation ─────────────────────────────────── -->
+      <nav class="tab-nav">
+        <button class="tab-btn active" id="tab-dashboard" onclick="Tabs.show('dashboard')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7" />
+            <rect x="14" y="3" width="7" height="7" />
+            <rect x="14" y="14" width="7" height="7" />
+            <rect x="3" y="14" width="7" height="7" />
+          </svg>
+          Dashboard
+        </button>
+        <button class="tab-btn" id="tab-whatif" onclick="Tabs.show('whatif')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          What-If Simulation
+        </button>
+        <button class="tab-btn" id="tab-forecast" onclick="Tabs.show('forecast')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+          </svg>
+          Demand Forecast
+        </button>
+        <button class="tab-btn" id="tab-tower" onclick="Tabs.show('tower')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="3 11 22 2 13 21 11 13 3 11" />
+          </svg>
+          Control Tower
+          <span class="live-badge" style="margin-left:4px;"><span class="live-dot"></span>Live</span>
+        </button>
+      </nav>
+
+      <!-- ══════════════════════════════════════════════════════
+           TAB 1: DASHBOARD (existing content)
+           ══════════════════════════════════════════════════════ -->
+      <div class="tab-panel active" id="panel-dashboard">
+
+        <!-- Map -->
+        <div class="map-panel">
+          <div class="map-header">
+            <div class="map-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="3 11 22 2 13 21 11 13 3 11" />
+              </svg>
+              Optimized Route Map
+            </div>
+            <div class="map-legend">
+              <div class="legend-item">
+                <div class="legend-dot" style="background:#3b82f6"></div>Route
+              </div>
+              <div class="legend-item">
+                <div class="legend-dot" style="background:#10b981;width:12px;height:12px;border-radius:2px;"></div>Depot
+              </div>
+              <div class="legend-item">
+                <div class="legend-dot" style="background:#f59e0b"></div>Delivery
+              </div>
+            </div>
+          </div>
+          <div style="position:relative;">
+            <div id="map"></div>
+            <div class="map-overlay" id="map-overlay">
+              <div class="spinner"></div>
+              <div class="overlay-text" id="overlay-text">Run optimization to see routes</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI Agent Pipeline -->
+        <div>
+          <div class="section-header">
+            <div>
+              <div class="section-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="7" height="7" />
+                  <rect x="14" y="3" width="7" height="7" />
+                  <rect x="14" y="14" width="7" height="7" />
+                  <rect x="3" y="14" width="7" height="7" />
+                </svg>
+                AI Agent Pipeline
+              </div>
+              <div class="section-subtitle">Sequential multi-agent optimization workflow</div>
+            </div>
+          </div>
+          <div class="agent-pipeline" id="agent-pipeline">
+            <div class="agent-card" id="agent-0">
+              <div class="agent-icon">&#127758;</div>
+              <div class="agent-name">Clustering Agent</div>
+              <span class="agent-status-badge badge-pending">Pending</span>
+              <div class="agent-msg">Groups nearby shipments by geography for consolidation.</div>
+            </div>
+            <div class="agent-card" id="agent-1">
+              <div class="agent-icon">&#9878;</div>
+              <div class="agent-name">Capacity Agent</div>
+              <span class="agent-status-badge badge-pending">Pending</span>
+              <div class="agent-msg">Validates vehicle weight capacity constraints.</div>
+            </div>
+            <div class="agent-card" id="agent-2">
+              <div class="agent-icon">&#128337;</div>
+              <div class="agent-name">SLA Agent</div>
+              <span class="agent-status-badge badge-pending">Pending</span>
+              <div class="agent-msg">Checks deadline and delivery time compliance.</div>
+            </div>
+            <div class="agent-card" id="agent-3">
+              <div class="agent-icon">&#127807;</div>
+              <div class="agent-name">Carbon Agent</div>
+              <span class="agent-status-badge badge-pending">Pending</span>
+              <div class="agent-msg">Calculates CO2 emissions vs baseline.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Route Results Table -->
+        <div>
+          <div class="section-header">
+            <div>
+              <div class="section-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                </svg>
+                Vehicle Route Assignments
+              </div>
+              <div class="section-subtitle" id="route-count-sub">Run optimization to see results</div>
+            </div>
+            <button class="btn btn-outline btn-sm" id="export-btn" onclick="App.exportCSV()"
+              style="display:none;">Export CSV</button>
+          </div>
+          <div class="card" style="padding:0;overflow:hidden;">
+            <div class="routes-table-wrap" id="routes-table-wrap">
+              <div class="empty-state">
+                <div class="empty-state-icon">&#128666;</div>
+                <div class="empty-state-text">No routes yet. Configure parameters and click Run Optimization.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div>
+          <div class="section-header">
+            <div class="section-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="20" x2="18" y2="10" />
+                <line x1="12" y1="20" x2="12" y2="4" />
+                <line x1="6" y1="20" x2="6" y2="14" />
+              </svg>
+              Performance Analytics
+            </div>
+          </div>
+          <div class="charts-grid">
+            <div class="chart-card">
+              <div class="chart-title">Cost: Before vs After</div><canvas id="cost-chart"></canvas>
+            </div>
+            <div class="chart-card">
+              <div class="chart-title">CO2 Emissions: Before vs After</div><canvas id="co2-chart"></canvas>
+            </div>
+            <div class="chart-card">
+              <div class="chart-title">Vehicle Utilization by Route</div><canvas id="util-chart"></canvas>
+            </div>
+            <div class="chart-card">
+              <div class="chart-title">Shipment Weight Distribution</div><canvas id="weight-chart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Before / After Comparison -->
+        <div>
+          <div class="section-header">
+            <div class="section-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="21 8 21 21 3 21 3 8" />
+                <rect x="1" y="3" width="22" height="5" />
+                <line x1="10" y1="12" x2="14" y2="12" />
+              </svg>
+              Before vs After Comparison
+            </div>
+          </div>
+          <div class="comparison-grid" id="comparison-grid">
+            <div class="compare-col before">
+              <div class="compare-col-title">Before Optimization</div>
+              <div class="empty-state" style="padding:30px;">
+                <div class="empty-state-text">Run optimization first</div>
+              </div>
+            </div>
+            <div class="compare-col after">
+              <div class="compare-col-title">After Optimization</div>
+              <div class="empty-state" style="padding:30px;">
+                <div class="empty-state-text">Run optimization first</div>
+              </div>
+            </div>
+          </div>
+          <div id="savings-summary"></div>
+        </div>
+
+        <!-- Cluster Summary -->
+        <div id="cluster-section" style="display:none;">
+          <div class="section-header">
+            <div class="section-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="18" cy="5" r="3" />
+                <circle cx="6" cy="12" r="3" />
+                <circle cx="18" cy="19" r="3" />
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+              </svg>
+              Shipment Clusters
+            </div>
+          </div>
+          <div class="cluster-grid" id="cluster-grid"></div>
+        </div>
+
+      </div><!-- /panel-dashboard -->
+
+      <!-- ══════════════════════════════════════════════════════
+           TAB 2: WHAT-IF SIMULATION
+           ══════════════════════════════════════════════════════ -->
+      <div class="tab-panel" id="panel-whatif">
+
+        <!-- Intro -->
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+            <div>
+              <div class="section-title" style="font-size:16px;">&#129300; What-If Scenario Simulator</div>
+              <div class="section-subtitle" style="margin-top:6px;">Adjust fuel price, carbon tax, and fleet size to see
+                how costs and emissions change. Run optimization first to enable simulations.</div>
+            </div>
+            <button class="btn btn-primary" style="width:auto;padding:10px 24px;" id="run-sim-btn"
+              onclick="Upgrades.runSimulation()">Run Scenarios</button>
+          </div>
+        </div>
+
+        <!-- Sliders -->
+        <div class="sim-controls">
+          <div class="sim-control-group">
+            <span class="sim-label">&#9971; Fuel Price (₹/L)</span>
+            <div class="sim-value-display" id="fuel-price-val">₹92</div>
+            <input type="range" class="form-range" id="fuel-price" min="70" max="150" value="92" step="2"
+              oninput="document.getElementById('fuel-price-val').textContent='₹'+this.value" />
+            <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">Scenario 2: ₹<input type="number"
+                id="fuel-price-2" value="110" min="70" max="180"
+                style="width:50px;background:transparent;border:1px solid var(--bg-border);border-radius:4px;color:var(--amber);text-align:center;padding:2px 4px;font-size:11px;" />
+            </div>
+          </div>
+          <div class="sim-control-group">
+            <span class="sim-label">&#127807; Carbon Tax (₹/kg)</span>
+            <div class="sim-value-display" id="carbon-tax-val" style="color:var(--green);">₹0</div>
+            <input type="range" class="form-range" id="carbon-tax" min="0" max="20" value="0" step="1"
+              oninput="document.getElementById('carbon-tax-val').textContent='₹'+this.value" />
+            <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">Scenario 2 tax: ₹<input type="number"
+                id="carbon-tax-2" value="5" min="0" max="50"
+                style="width:50px;background:transparent;border:1px solid var(--bg-border);border-radius:4px;color:var(--amber);text-align:center;padding:2px 4px;font-size:11px;" />
+            </div>
+          </div>
+          <div class="sim-control-group">
+            <span class="sim-label">&#128666; Fleet Override</span>
+            <div class="sim-value-display" id="fleet-override-val" style="color:var(--purple);">Auto</div>
+            <input type="range" class="form-range" id="fleet-override" min="0" max="50" value="0" step="1"
+              oninput="document.getElementById('fleet-override-val').textContent=this.value==0?'Auto':this.value+' trucks'" />
+            <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">Scenario 3: reduced by 2 vehicles</div>
+          </div>
+          <div class="sim-control-group">
+            <span class="sim-label">&#9733; Priority Weight</span>
+            <div class="sim-value-display" id="priority-w-val" style="color:var(--blue-light);">1.0x</div>
+            <input type="range" class="form-range" id="priority-w" min="0.5" max="2.0" value="1.0" step="0.1"
+              oninput="document.getElementById('priority-w-val').textContent=parseFloat(this.value).toFixed(1)+'x'" />
+            <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">Multiplier on critical shipment cost
+            </div>
+          </div>
+        </div>
+
+        <!-- Scenario results table -->
+        <div class="card" style="padding:0;">
+          <div style="padding:16px 20px;border-bottom:1px solid var(--bg-border);">
+            <div class="section-title" style="font-size:13px;">Scenario Comparison</div>
+          </div>
+          <div class="scenario-table-wrap" id="sim-table-wrap">
+            <div class="empty-state">
+              <div class="empty-state-icon">&#9881;</div>
+              <div class="empty-state-text">Click "Run Scenarios" above to compare outcomes across different operating
+                conditions.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Scenario chart -->
+        <div class="charts-grid" style="grid-template-columns:1fr 1fr;">
+          <div class="chart-card">
+            <div class="chart-title">Total Cost by Scenario</div><canvas id="sim-cost-chart"></canvas>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">CO2 Emissions by Scenario</div><canvas id="sim-co2-chart"></canvas>
+          </div>
+        </div>
+
+      </div><!-- /panel-whatif -->
+
+      <!-- ══════════════════════════════════════════════════════
+           TAB 3: DEMAND FORECAST
+           ══════════════════════════════════════════════════════ -->
+      <div class="tab-panel" id="panel-forecast">
+
+        <!-- Header controls -->
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+            <div>
+              <div class="section-title" style="font-size:16px;">&#127775; Demand Forecast Engine</div>
+              <div class="section-subtitle" style="margin-top:6px;">Weighted moving average + trend model trained on
+                30-day simulated history derived from your real shipment distribution.</div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;">
+              <label class="form-label" style="margin:0;">Horizon (days):</label>
+              <select class="form-select" id="forecast-horizon" style="width:80px;">
+                <option value="1">1 day</option>
+                <option value="3" selected>3 days</option>
+                <option value="7">7 days</option>
+              </select>
+              <button class="btn btn-primary" style="width:auto;padding:10px 20px;" onclick="Upgrades.runForecast()">Run
+                Forecast</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Summary stats -->
+        <div class="forecast-summary" id="forecast-summary">
+          <div class="forecast-stat">
+            <div class="forecast-stat-value" id="fc-total">--</div>
+            <div class="forecast-stat-label">Predicted Shipments Tomorrow</div>
+          </div>
+          <div class="forecast-stat">
+            <div class="forecast-stat-value" id="fc-fleet" style="color:var(--amber);">--</div>
+            <div class="forecast-stat-label">Suggested Fleet Size</div>
+          </div>
+          <div class="forecast-stat">
+            <div class="forecast-stat-value" id="fc-zones" style="color:var(--green);">--</div>
+            <div class="forecast-stat-label">Active Demand Zones</div>
+          </div>
+        </div>
+
+        <!-- Zone alerts -->
+        <div id="forecast-alerts"></div>
+
+        <!-- Zone cards -->
+        <div>
+          <div class="section-title" style="font-size:13px;margin-bottom:14px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+              <circle cx="12" cy="10" r="3" />
+            </svg>
+            Demand by Zone — Tomorrow
+          </div>
+          <div class="forecast-zones" id="forecast-zones">
+            <div class="empty-state">
+              <div class="empty-state-icon">&#127758;</div>
+              <div class="empty-state-text">Click "Run Forecast" to see demand predictions across all zones.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Forecast chart -->
+        <div class="chart-card">
+          <div class="chart-title">Multi-Day Demand Forecast — Top 5 Zones</div><canvas id="forecast-chart"
+            style="max-height:300px;"></canvas>
+        </div>
+
+      </div><!-- /panel-forecast -->
+
+      <!-- ══════════════════════════════════════════════════════
+           TAB 4: LIVE CONTROL TOWER
+           ══════════════════════════════════════════════════════ -->
+      <div class="tab-panel" id="panel-tower">
+
+        <!-- Header -->
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+            <div>
+              <div class="section-title" style="font-size:16px;">
+                &#128752; AI Logistics Command Center
+                <span class="live-badge" style="margin-left:10px;"><span class="live-dot"></span>Live</span>
+              </div>
+              <div class="section-subtitle" style="margin-top:6px;">Real-time operational snapshot powered by your
+                5,000-shipment + 300-vehicle dataset. Auto-refreshes every 30 seconds.</div>
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="Upgrades.refreshTower()">&#10227; Refresh</button>
+          </div>
+        </div>
+
+        <!-- Main KPI cards -->
+        <div class="tower-grid" id="tower-grid">
+          <div class="tower-card live">
+            <div class="tower-label">Active Shipments</div>
+            <div class="tower-value blue" id="tw-active">--</div>
+            <div class="tower-sub" id="tw-active-sub">--</div>
+          </div>
+          <div class="tower-card live">
+            <div class="tower-label">Vehicles On Road</div>
+            <div class="tower-value green" id="tw-onroad">--</div>
+            <div class="tower-sub" id="tw-onroad-sub">--</div>
+          </div>
+          <div class="tower-card live">
+            <div class="tower-label">Avg Utilization</div>
+            <div class="tower-value amber" id="tw-util">--</div>
+            <div class="tower-sub" id="tw-util-sub">--</div>
+          </div>
+          <div class="tower-card live">
+            <div class="tower-label">CO₂ Today</div>
+            <div class="tower-value" style="color:var(--purple);" id="tw-co2">--</div>
+            <div class="tower-sub" id="tw-co2-sub">--</div>
+          </div>
+          <div class="tower-card">
+            <div class="tower-label">Delivered Today</div>
+            <div class="tower-value green" id="tw-delivered">--</div>
+            <div class="tower-sub">shipments completed</div>
+          </div>
+          <div class="tower-card">
+            <div class="tower-label">At Depot</div>
+            <div class="tower-value blue" id="tw-depot">--</div>
+            <div class="tower-sub">awaiting dispatch</div>
+          </div>
+          <div class="tower-card">
+            <div class="tower-label">Delayed Routes</div>
+            <div class="tower-value" style="color:var(--red);" id="tw-delayed">--</div>
+            <div class="tower-sub" id="tw-delayed-sub">--</div>
+          </div>
+          <div class="tower-card">
+            <div class="tower-label">Operational Cost</div>
+            <div class="tower-value" style="font-size:22px;" id="tw-cost">--</div>
+            <div class="tower-sub">today's total</div>
+          </div>
+        </div>
+
+        <!-- Tower alerts -->
+        <div id="tower-alerts"></div>
+
+        <!-- Live routes table -->
+        <div class="card" style="padding:0;">
+          <div
+            style="padding:14px 20px;border-bottom:1px solid var(--bg-border);display:flex;align-items:center;justify-content:space-between;">
+            <div class="section-title" style="font-size:13px;">Active Route Tracking</div>
+            <span class="live-badge"><span class="live-dot"></span>Auto-tracked</span>
+          </div>
+          <div style="overflow-x:auto;" id="tower-routes-wrap">
+            <div class="empty-state">
+              <div class="empty-state-icon">&#128666;</div>
+              <div class="empty-state-text">Loading live data...</div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /panel-tower -->
+
+    </div><!-- /content column -->
+  </div><!-- /main-layout -->
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Scripts -->
+  <script src="/static/js/map.js"></script>
+  <script src="/static/js/charts.js"></script>
+  <script src="/static/js/app.js"></script>
+  <script src="/static/js/upgrades.js"></script>
+
+</body>
+
+</html>
