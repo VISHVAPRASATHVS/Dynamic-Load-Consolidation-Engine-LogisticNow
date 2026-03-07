@@ -64,8 +64,11 @@
 The core objective of *LogisticNow* is to prove ROI through substantial efficiency gains in last-mile logic tasks. Based on synthetic and pilot benchmark evaluations, the system delivers the following average outcomes against baseline (non-optimized / naive FIFO dispatch) performance:
 
 | **Total Transportation Cost** | Highly variable, un-consolidated LTLs | Unified FTLs with optimized routing. | **18% - 25% Reduction** |
+
 | **Carbon Emissions (CO2)**| High idling, long un-optimized miles. | Minimal distance traveled per shipment. | **15% - 22% Reduction** |
+
 | **Fleet Utilization Rate** | 60% Capacity (Empty Miles issue). | >90% Capacity matching via VRP logic. | **30% Increase** |
+
 | **SLA Adherence (On-Time)**| Susceptible to delays without clustering. | Priority weights built into the constraint solver. | **Strict 99%+ Guarantee** |
 
 **How it achieves this:** The Engine stops treating shipments sequentially. By applying **DBSCAN**, it pre-bundles shipments destined for the same dense zones. The **OR-Tools Solver** then orchestrates multi-stop routes precisely constrained by vehicle weight limits and delivery windows. 
